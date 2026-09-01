@@ -81,6 +81,14 @@ dbus (send)
     interface=io.snapcraft.PrivilegedDesktopLauncher
     member=OpenDesktopEntry
     peer=(label=unconfined),
+
+# Lets a snap ask userd to open a URL via its registered scheme handler
+dbus (send)
+    bus=session
+    path=/io/snapcraft/Launcher
+    interface=io.snapcraft.Launcher
+    member=OpenURL
+    peer=(label=unconfined),
 `
 
 func (iface *desktopLaunchInterface) Name() string {
