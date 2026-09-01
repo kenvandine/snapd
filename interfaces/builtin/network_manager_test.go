@@ -189,6 +189,14 @@ func (s *NetworkManagerInterfaceSuite) TestConnectedSlotSnippetAppArmor(c *C) {
 	c.Assert(apparmorSpec.SnippetForTag("snap.network-manager.nm"), testutil.Contains, `/org/freedesktop/NetworkManager`)
 }
 
+func (s *NetworkManagerInterfaceSuite) TestPermanentSlotAppArmorNetplanExec(c *C) {
+	apparmorSpec := apparmor.NewSpecification(s.slot.AppSet())
+	err := apparmorSpec.AddPermanentSlot(s.iface, s.slotInfo)
+	c.Assert(err, IsNil)
+	c.Assert(apparmorSpec.SnippetForTag("snap.network-manager.nm"), testutil.Contains, `/usr/share/netplan/netplan.script ixr,`)
+	c.Assert(apparmorSpec.SnippetForTag("snap.network-manager.nm"), testutil.Contains, `/usr/libexec/netplan/configure ixr,`)
+}
+
 func (s *NetworkManagerInterfaceSuite) TestUsedSecuritySystems(c *C) {
 	apparmorSpec := apparmor.NewSpecification(s.plug.AppSet())
 	err := apparmorSpec.AddConnectedPlug(s.iface, s.plug, s.slot)

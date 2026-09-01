@@ -104,6 +104,16 @@ network packet,
 # in the same place.
 /run/NetworkManager/{,**} rw,
 
+# The above grants read/write on netplan's own config files, but
+# NetworkManager also needs to invoke netplan's own helpers to actually
+# apply a newly written connection - confirmed on a real boot: adding a
+# new Wi-Fi connection via AddAndActivateConnection failed with "netplan
+# generate failed", and the kernel audit log showed AppArmor denying the
+# exec itself (not a netplan-side error) for both of the two paths this
+# helper has shipped at across NetworkManager snap revisions.
+/usr/share/netplan/netplan.script ixr,
+/usr/libexec/netplan/configure ixr,
+
 # Needed by the ifupdown plugin to check which interfaces can
 # be managed an which not.
 /etc/network/interfaces r,
