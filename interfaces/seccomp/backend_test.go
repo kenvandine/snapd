@@ -899,8 +899,16 @@ apps:
 		c.Assert(string(data), testutil.Contains, line)
 	}
 
-	// make sure the bare syscalls aren't present
-	c.Assert(string(data), Not(testutil.Contains), "setresuid\n")
+	// bare syscalls are present too, even with system-usernames declared -
+	// they're needed for a process to call setuid()/setgid() on its own
+	// already-current id (e.g. Xwayland does this, harmlessly, as part of
+	// its normal startup - confirmed on a real boot), which can't be
+	// expressed as one of the argument-filtered rules above since there's
+	// no build-time-constant "self" id to filter against. This doesn't
+	// widen what the snap can actually escalate to: AppArmor's capability
+	// grant (not this syscall allowlist) is what mediates that, and
+	// declaring system-usernames already grants it unconditionally.
+	c.Assert(string(data), testutil.Contains, "\nsetresuid\n")
 }
 
 func (s *backendSuite) TestNoSystemUsernamesPolicy(c *C) {

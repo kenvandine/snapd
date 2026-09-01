@@ -275,9 +275,21 @@ func (b *Backend) deriveContent(spec *Specification, opts interfaces.Confinement
 	addSocketcall := requiresSocketcall(snapInfo.Base)
 
 	var uidGidChownSyscalls bytes.Buffer
-	if len(snapInfo.SystemUsernames) == 0 {
-		uidGidChownSyscalls.WriteString(barePrivDropSyscalls)
-	} else {
+	// barePrivDropSyscalls is always included, even when SystemUsernames is
+	// declared: the argument-filtered rules below only cover setuid/setgid
+	// *to* root or a declared system-username, not a process calling
+	// setgid()/setuid() on its own already-current id (confirmed on a real
+	// boot: Xwayland does exactly this, harmlessly, as part of its normal
+	// startup, and unlike the argument-filtered rules a self-targeting
+	// call can't be expressed as a build-time constant since the "current"
+	// id varies per system/user). This doesn't widen what the snap can
+	// actually escalate to - same as barePrivDropSyscalls' own comment
+	// says, AppArmor's capability grant is what mediates that, and
+	// declaring system-usernames already grants the capability
+	// unconditionally regardless of which of these two syscall sets is
+	// present.
+	uidGidChownSyscalls.WriteString(barePrivDropSyscalls)
+	if len(snapInfo.SystemUsernames) > 0 {
 		for _, id := range snapInfo.SystemUsernames {
 			syscalls, err := uidGidChownSnippet(id.Name)
 			if err != nil {
