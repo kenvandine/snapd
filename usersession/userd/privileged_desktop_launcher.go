@@ -94,16 +94,8 @@ func (s *PrivilegedDesktopLauncher) OpenDesktopEntry(desktopFileID string, sende
 		return dbus.MakeFailedError(err)
 	}
 
-	err = systemd.EnsureAtLeast(236)
-	if err == nil {
-		// systemd 236 introduced the --collect option to systemd-run,
-		// which specifies that the unit should be garbage collected
-		// even if it fails.
-		//   https://github.com/systemd/systemd/pull/7314
-		args = append([]string{"systemd-run", "--user", "--collect", "--"}, args...)
-	} else if systemd.IsSystemdTooOld(err) {
-		args = append([]string{"systemd-run", "--user", "--"}, args...)
-	} else {
+	args, err = wrapWithSystemdRun(args)
+	if err != nil {
 		// systemd not available
 		return dbus.MakeFailedError(err)
 	}
@@ -115,6 +107,23 @@ func (s *PrivilegedDesktopLauncher) OpenDesktopEntry(desktopFileID string, sende
 	}
 
 	return nil
+}
+
+// wrapWithSystemdRun prepends the systemd-run invocation used to run an
+// expanded Exec= as a transient user-session unit.
+func wrapWithSystemdRun(args []string) ([]string, error) {
+	err := systemd.EnsureAtLeast(236)
+	if err == nil {
+		// systemd 236 introduced the --collect option to systemd-run,
+		// which specifies that the unit should be garbage collected
+		// even if it fails.
+		//   https://github.com/systemd/systemd/pull/7314
+		return append([]string{"systemd-run", "--user", "--collect", "--"}, args...), nil
+	} else if systemd.IsSystemdTooOld(err) {
+		return append([]string{"systemd-run", "--user", "--"}, args...), nil
+	}
+	// systemd not available
+	return nil, err
 }
 
 var regularFileExists = osutil.RegularFileExists

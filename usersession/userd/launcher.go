@@ -25,12 +25,16 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"syscall"
 	"time"
 
 	"github.com/godbus/dbus/v5"
 
+	"github.com/snapcore/snapd/desktop/desktopentry"
+	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/i18n"
 	"github.com/snapcore/snapd/logger"
 	"github.com/snapcore/snapd/osutil"
@@ -108,6 +112,11 @@ var (
 		//   protected by policykit/snap login
 		//   - https://github.com/snapcore/snapd/pull/5181
 		"snap",
+		// steam: the scheme allows launching a specific game via the
+		//   Steam client, which registers itself as the
+		//   x-scheme-handler/steam handler
+		//   - scheme: steam://rungameid/<id>, steam://open/<page>, etc.
+		"steam",
 		// zoommtg: the scheme is a modified web url scheme
 		//   - scheme: https://medium.com/zoom-developer-blog/zoom-url-schemes-748b95fd9205
 		//     (eg, zoommtg://zoom.us/...)
@@ -171,14 +180,69 @@ func schemeHasHandler(scheme string) (bool, error) {
 	return validDesktopFileName.Match(out), nil
 }
 
+// findDesktopFileForScheme scans dirs.SnapDesktopFilesDir (the directory
+// OpenDesktopEntry also restricts itself to) for a snap-provided .desktop
+// entry registering itself as the handler for the given URI scheme via
+// MimeType=x-scheme-handler/<scheme>.
+func findDesktopFileForScheme(scheme string) (string, error) {
+	handlerMimeType := "x-scheme-handler/" + scheme
+
+	matches, err := filepath.Glob(filepath.Join(dirs.SnapDesktopFilesDir, "*.desktop"))
+	if err != nil {
+		return "", err
+	}
+	sort.Strings(matches)
+
+	for _, path := range matches {
+		de, err := desktopentry.Read(path)
+		if err != nil {
+			continue
+		}
+		if strutil.ListContains(de.MimeType, handlerMimeType) {
+			return path, nil
+		}
+	}
+
+	return "", fmt.Errorf("no application registered to handle %q", handlerMimeType)
+}
+
+// openURLOnCore resolves and launches the URL scheme's registered
+// handler directly (systemd-run --user, as OpenDesktopEntry does),
+// instead of delegating to xdg-open: on Ubuntu Core /usr/bin/xdg-open is
+// a snapd-provided shim that calls back into this same OpenURL D-Bus
+// method, which would recurse.
+func openURLOnCore(addr, scheme string) error {
+	desktopFile, err := findDesktopFileForScheme(scheme)
+	if err != nil {
+		return err
+	}
+
+	de, err := desktopentry.Read(desktopFile)
+	if err != nil {
+		return err
+	}
+
+	args, err := de.ExpandExec([]string{addr})
+	if err != nil {
+		return err
+	}
+
+	args, err = wrapWithSystemdRun(args)
+	if err != nil {
+		return err
+	}
+
+	if err := exec.Command(args[0], args[1:]...).Run(); err != nil {
+		return fmt.Errorf("cannot run %q: %v", args, err)
+	}
+	return nil
+}
+
 // OpenURL implements the 'OpenURL' method of the 'io.snapcraft.Launcher'
 // DBus interface. Before the provided url is passed to xdg-open the scheme is
 // validated against a list of allowed schemes. All other schemes are denied.
 func (s *Launcher) OpenURL(addr string, sender dbus.Sender) *dbus.Error {
 	logger.Debugf("open url: %q", addr)
-	if err := checkOnClassic(); err != nil {
-		return err
-	}
 
 	u, err := url.Parse(addr)
 	if err != nil {
@@ -189,10 +253,10 @@ func (s *Launcher) OpenURL(addr string, sender dbus.Sender) *dbus.Error {
 	}
 
 	isAllowed := strutil.ListContains(allowedURLSchemes, u.Scheme)
-	if !isAllowed {
+	if !isAllowed && release.OnClassic {
 		// scheme is not listed in our allowed schemes list, perform
 		// fallback and check whether the local system has a handler for
-		// it
+		// it - relies on xdg-mime, not present on Ubuntu Core
 		isAllowed, err = schemeHasHandler(u.Scheme)
 		if err != nil {
 			logger.Noticef("cannot obtain scheme handler for %q: %v", u.Scheme, err)
@@ -200,6 +264,13 @@ func (s *Launcher) OpenURL(addr string, sender dbus.Sender) *dbus.Error {
 	}
 	if !isAllowed {
 		return makeAccessDeniedError(fmt.Errorf("Supplied URL scheme %q is not allowed", u.Scheme))
+	}
+
+	if !release.OnClassic {
+		if err := openURLOnCore(addr, u.Scheme); err != nil {
+			return dbus.MakeFailedError(err)
+		}
+		return nil
 	}
 
 	// ATTENTION!

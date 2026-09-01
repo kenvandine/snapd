@@ -29,6 +29,7 @@ import (
 	"github.com/godbus/dbus/v5"
 	. "gopkg.in/check.v1"
 
+	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/osutil/sys"
 	"github.com/snapcore/snapd/release"
 	"github.com/snapcore/snapd/testutil"
@@ -59,6 +60,15 @@ func (s *launcherSuite) SetUpTest(c *C) {
 	s.AddCleanup(userd.MockSnapFromSender(func(*dbus.Conn, dbus.Sender) (string, error) {
 		return "some-snap", nil
 	}))
+
+	// openURLOnCore resolves handlers under dirs.SnapDesktopFilesDir, so
+	// give it a fresh, empty root instead of this machine's real
+	// /var/lib/snapd/desktop/applications. Restored on cleanup since
+	// dirs.GlobalRootDir is package-global state shared by other suites.
+	oldRootDir := dirs.GlobalRootDir
+	dirs.SetRootDir(c.MkDir())
+	s.AddCleanup(func() { dirs.SetRootDir(oldRootDir) })
+	c.Assert(os.MkdirAll(dirs.SnapDesktopFilesDir, 0755), IsNil)
 }
 
 func (s *launcherSuite) TestOpenURLWithNotAllowedScheme(c *C) {
@@ -86,7 +96,7 @@ func (s *launcherSuite) TestOpenURLWithNotAllowedScheme(c *C) {
 }
 
 func (s *launcherSuite) TestOpenURLWithAllowedSchemeHappy(c *C) {
-	for _, schema := range []string{"http", "https", "mailto", "snap", "help", "apt", "zoommtg", "zoomus", "zoomphonecall", "slack", "msteams"} {
+	for _, schema := range []string{"http", "https", "mailto", "snap", "help", "apt", "zoommtg", "zoomus", "zoomphonecall", "slack", "msteams", "steam"} {
 		err := s.launcher.OpenURL(schema+"://snapcraft.io", ":some-dbus-sender")
 		c.Assert(err, IsNil)
 		c.Assert(s.mockXdgOpen.Calls(), DeepEquals, [][]string{
@@ -243,7 +253,7 @@ func (s *launcherSuite) TestOpenFileFailsWithPathDescriptor(c *C) {
 	c.Assert(s.mockXdgOpen.Calls(), IsNil)
 }
 
-func (s *launcherSuite) TestFailsOnUbuntuCore(c *C) {
+func (s *launcherSuite) TestOpenFileFailsOnUbuntuCore(c *C) {
 	restore := release.MockOnClassic(false)
 	defer restore()
 
@@ -258,8 +268,40 @@ func (s *launcherSuite) TestFailsOnUbuntuCore(c *C) {
 	err = s.launcher.OpenFile("", dbus.UnixFD(dupFd), ":some-dbus-sender")
 	c.Check(err, ErrorMatches, "not supported on Ubuntu Core")
 
-	err = s.launcher.OpenURL("https://snapcraft.io", ":some-dbus-sender")
-	c.Check(err, ErrorMatches, "not supported on Ubuntu Core")
-
 	c.Check(s.mockXdgOpen.Calls(), HasLen, 0)
+}
+
+func (s *launcherSuite) TestOpenURLNoHandlerOnUbuntuCore(c *C) {
+	restore := release.MockOnClassic(false)
+	defer restore()
+
+	err := s.launcher.OpenURL("https://snapcraft.io", ":some-dbus-sender")
+	c.Check(err, ErrorMatches, `no application registered to handle "x-scheme-handler/https"`)
+	c.Check(s.mockXdgOpen.Calls(), HasLen, 0)
+}
+
+func (s *launcherSuite) TestOpenURLWithHandlerOnUbuntuCore(c *C) {
+	restore := release.MockOnClassic(false)
+	defer restore()
+
+	mockSystemdRun := testutil.MockCommand(c, "systemd-run", "true")
+	defer mockSystemdRun.Restore()
+
+	desktopFile := `[Desktop Entry]
+Name=Steam
+Exec=/snap/bin/steam %U
+MimeType=x-scheme-handler/steam;
+Type=Application
+`
+	c.Assert(os.WriteFile(filepath.Join(dirs.SnapDesktopFilesDir, "steam_steam.desktop"), []byte(desktopFile), 0644), IsNil)
+
+	err := s.launcher.OpenURL("steam://rungameid/945360", ":some-dbus-sender")
+	c.Check(err, IsNil)
+	c.Check(s.mockXdgOpen.Calls(), HasLen, 0)
+	calls := mockSystemdRun.Calls()
+	c.Assert(calls, HasLen, 1)
+	c.Check(calls[0], DeepEquals, []string{
+		"systemd-run", "--user", "--collect", "--",
+		"/snap/bin/steam", "steam://rungameid/945360",
+	})
 }
