@@ -46,6 +46,7 @@ type DesktopEntry struct {
 	Hidden                bool
 	OnlyShowIn            []string
 	NotShownIn            []string
+	MimeType              []string
 	GnomeAutostartEnabled bool
 
 	Actions map[string]*Action
@@ -157,6 +158,8 @@ func parse(filename string, r io.Reader) (*DesktopEntry, error) {
 				de.OnlyShowIn = splitList(value)
 			case "NotShownIn":
 				de.NotShownIn = splitList(value)
+			case "MimeType":
+				de.MimeType = splitList(value)
 			case "X-GNOME-Autostart-enabled":
 				de.GnomeAutostartEnabled = value == "true"
 			case "Actions":
