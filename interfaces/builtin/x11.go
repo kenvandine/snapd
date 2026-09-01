@@ -84,6 +84,14 @@ unix (bind, listen, accept)
 /sys/devices/pci**/boot_vga r,
 /sys/devices/pci**/resources r,
 
+# xkbcomp writes its compiled keymap here - computed via getuid()
+# directly rather than $XDG_RUNTIME_DIR, so it lands at the plain
+# /run/user/<uid>/ path even for a snap whose own XDG_RUNTIME_DIR is
+# remapped to a per-snap subdirectory (confirmed on a real boot: a
+# confined Xwayland's xkbcomp child failed with "Cannot open
+# /run/user/1000/server-0.xkm to write keyboard description").
+/run/user/[0-9]*/*.xkm rw,
+
 # TODO: enable rules for writing Xwayland Xauth files for clients to read when
 # something like gnome-shell is running confined with an x11 slot
 `
