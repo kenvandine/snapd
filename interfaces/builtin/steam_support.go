@@ -23,7 +23,6 @@ import (
 	"github.com/snapcore/snapd/interfaces"
 	"github.com/snapcore/snapd/interfaces/apparmor"
 	"github.com/snapcore/snapd/interfaces/udev"
-	"github.com/snapcore/snapd/release"
 	apparmor_sandbox "github.com/snapcore/snapd/sandbox/apparmor"
 	"github.com/snapcore/snapd/strutil"
 )
@@ -417,7 +416,7 @@ func init() {
 	registerIface(&steamSupportInterface{commonInterface{
 		name:                 "steam-support",
 		summary:              steamSupportSummary,
-		implicitOnCore:       release.OnCoreDesktop,
+		implicitOnCore:       true,
 		implicitOnClassic:    true,
 		baseDeclarationSlots: steamSupportBaseDeclarationSlots,
 		baseDeclarationPlugs: steamSupportBaseDeclarationPlugs,

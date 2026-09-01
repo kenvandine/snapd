@@ -27,7 +27,6 @@ import (
 	"github.com/snapcore/snapd/interfaces/builtin"
 	"github.com/snapcore/snapd/interfaces/seccomp"
 	"github.com/snapcore/snapd/interfaces/udev"
-	"github.com/snapcore/snapd/release"
 	apparmor_sandbox "github.com/snapcore/snapd/sandbox/apparmor"
 	"github.com/snapcore/snapd/snap"
 	"github.com/snapcore/snapd/testutil"
@@ -152,7 +151,7 @@ func (s *SteamSupportInterfaceSuite) TestUDevSpec(c *C) {
 
 func (s *SteamSupportInterfaceSuite) TestStaticInfo(c *C) {
 	si := interfaces.StaticInfoOf(s.iface)
-	c.Assert(si.ImplicitOnCore, Equals, release.OnCoreDesktop)
+	c.Assert(si.ImplicitOnCore, Equals, true)
 	c.Assert(si.ImplicitOnClassic, Equals, true)
 	c.Assert(si.Summary, Equals, `allows Steam to configure pressure-vessel containers`)
 	c.Assert(si.BaseDeclarationSlots, testutil.Contains, "steam-support")
