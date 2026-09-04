@@ -114,6 +114,11 @@ network packet,
 /usr/share/netplan/netplan.script ixr,
 /usr/libexec/netplan/configure ixr,
 
+# The two ixr rules above only cover the helper scripts themselves, not
+# the netplan_cli Python package they import from /usr/share/netplan/,
+# which needs plain read access.
+/usr/share/netplan/{,**} r,
+
 # Needed by the ifupdown plugin to check which interfaces can
 # be managed an which not.
 /etc/network/interfaces r,

@@ -195,6 +195,7 @@ func (s *NetworkManagerInterfaceSuite) TestPermanentSlotAppArmorNetplanExec(c *C
 	c.Assert(err, IsNil)
 	c.Assert(apparmorSpec.SnippetForTag("snap.network-manager.nm"), testutil.Contains, `/usr/share/netplan/netplan.script ixr,`)
 	c.Assert(apparmorSpec.SnippetForTag("snap.network-manager.nm"), testutil.Contains, `/usr/libexec/netplan/configure ixr,`)
+	c.Assert(apparmorSpec.SnippetForTag("snap.network-manager.nm"), testutil.Contains, `/usr/share/netplan/{,**} r,`)
 }
 
 func (s *NetworkManagerInterfaceSuite) TestUsedSecuritySystems(c *C) {
